@@ -169,11 +169,16 @@ export default function Home() {
       const firebaseError = error as AuthError;
       console.error("Error login:", firebaseError);
       
-      // Mensaje de ayuda específico para problemas de popup/navegador interno
+      // 1. Si el usuario cerró la ventana voluntariamente, NO mostramos alerta.
+      if (firebaseError.code === 'auth/popup-closed-by-user') {
+        return; 
+      }
+
+      // 2. Solo mostramos la ayuda si fue un bloqueo real o error técnico dentro de Instagram
       if (firebaseError.code === 'auth/popup-blocked' || firebaseError.code === 'auth/cancelled-popup-request' || isInAppBrowser) {
-        alert("⚠️ El navegador bloqueó el inicio de sesión.\n\nPor favor, toca los 3 puntos (arriba a la derecha) y selecciona 'Abrir en el navegador del sistema' (Chrome/Safari) para poder ingresar.");
+        alert("⚠️ No pudimos abrir la ventana de Google.\n\nEs probable que el navegador de Instagram/Facebook la esté bloqueando.\n\nSolución: Toca los 3 puntos (arriba derecha) y elige 'Abrir en el navegador del sistema'.");
       } else {
-        alert("Error al iniciar sesión. Intenta abrir la página en Chrome o Safari.");
+        alert("Ocurrió un error al intentar ingresar. Por favor intenta nuevamente.");
       }
     }
   };
