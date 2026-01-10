@@ -79,7 +79,7 @@ const LocationPicker = dynamic(
 
 const CATEGORIES = [
   { id: 'agua', label: 'Agua / Alimentos', icon: <Droplet size={18} /> },
-  { id: 'logistica', label: 'Transporte / 4x4', icon: <Truck size={18} /> },
+  { id: 'logistica', label: 'Transporte', icon: <Truck size={18} /> },
   { id: 'herramientas', label: 'Herramientas / Equipos', icon: <Wrench size={18} /> },
   { id: 'salud', label: 'Salud / Primeros Auxilios', icon: <Stethoscope size={18} /> },
   { id: 'hospedaje', label: 'Hospedaje / Evacuados', icon: <HomeIcon size={18} /> },
