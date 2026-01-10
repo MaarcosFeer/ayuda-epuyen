@@ -4,19 +4,23 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { 
   collection, addDoc, onSnapshot, 
-  query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc,
+  query, orderBy, serverTimestamp, doc, deleteDoc,
   Timestamp
 } from "firebase/firestore";
 import { 
-  signInWithPopup, GoogleAuthProvider, 
-  signOut, onAuthStateChanged, User as FirebaseUser 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  User as FirebaseUser,
+  AuthError
 } from "firebase/auth";
 import { db, auth, googleProvider } from '../lib/firebase';
 import { 
   AlertTriangle, CheckCircle, Truck, Droplet, 
   Home as HomeIcon, Stethoscope, Users, Wrench, X, 
   MapPin, Phone, Filter, Plus, LogOut, ShieldCheck, User,
-  Map as MapIcon, List as ListIcon, Navigation, Trash2 
+  Map as MapIcon, List as ListIcon, Navigation, Trash2,
+  ExternalLink, Info
 } from 'lucide-react';
 
 // --- INTERFACES ---
@@ -59,6 +63,7 @@ const CommunityMap = dynamic(
   posts: Post[];
   center?: [number, number];
   zoom?: number;
+  key?: string;
 }>;
 
 const LocationPicker = dynamic(
@@ -103,6 +108,7 @@ export default function Home() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   
   // Vista por defecto: Mapa
   const [viewMode, setViewMode] = useState<'list' | 'map'>('map');
@@ -124,6 +130,7 @@ export default function Home() {
   });
 
   useEffect(() => {
+    // 1. Detectar Auth
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
@@ -133,6 +140,7 @@ export default function Home() {
       }
     });
 
+    // 2. Cargar Posts
     const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
     const unsubscribePosts = onSnapshot(q, (snapshot) => {
       const postsData = snapshot.docs.map(doc => ({
@@ -141,6 +149,12 @@ export default function Home() {
       })) as Post[];
       setPosts(postsData);
     });
+
+    // 3. Detectar Navegador de Instagram/Facebook
+    const userAgent = navigator.userAgent || navigator.vendor;
+    if (userAgent.includes("Instagram") || userAgent.includes("FBAN") || userAgent.includes("FBAV")) {
+        setIsInAppBrowser(true);
+    }
 
     return () => {
       unsubscribeAuth();
@@ -152,8 +166,15 @@ export default function Home() {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error("Error login:", error);
-      alert("Error al iniciar sesión.");
+      const firebaseError = error as AuthError;
+      console.error("Error login:", firebaseError);
+      
+      // Mensaje de ayuda específico para problemas de popup/navegador interno
+      if (firebaseError.code === 'auth/popup-blocked' || firebaseError.code === 'auth/cancelled-popup-request' || isInAppBrowser) {
+        alert("⚠️ El navegador bloqueó el inicio de sesión.\n\nPor favor, toca los 3 puntos (arriba a la derecha) y selecciona 'Abrir en el navegador del sistema' (Chrome/Safari) para poder ingresar.");
+      } else {
+        alert("Error al iniciar sesión. Intenta abrir la página en Chrome o Safari.");
+      }
     }
   };
 
@@ -184,21 +205,15 @@ export default function Home() {
         createdAt: serverTimestamp()
       });
       
-      // 1. Cerramos el formulario
       setShowForm(false);
-      
-      // 2. Limpiamos los datos
       setFormData({ type: 'necesidad', category: 'agua', title: '', description: '', location: '', contact: '', lat: undefined, lng: undefined });
-      
-      // 3. CAMBIO CLAVE: Forzamos la vista de mapa para que el usuario vea su pin creado
       setViewMode('map');
       
-      // 4. Opcional: Si el usuario marcó ubicación, centramos el mapa ahí
       if (formData.lat && formData.lng) {
         setMapConfig({
             center: [formData.lat, formData.lng],
             zoom: 15,
-            key: `new-${Date.now()}` // Key única para forzar recentrado
+            key: `new-${Date.now()}`
         });
       }
 
@@ -238,6 +253,14 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-10">
       
+      {/* AVISO INSTAGRAM (Solo se muestra si se detecta el navegador interno) */}
+      {isInAppBrowser && (
+          <div className="bg-indigo-600 text-white text-xs p-2 text-center flex items-center justify-center gap-2 cursor-pointer" onClick={() => alert("Toca los 3 puntos arriba a la derecha > Abrir en navegador")}>
+              <ExternalLink size={14} />
+              <span>Para mejor funcionamiento, abre esto en Chrome/Safari</span>
+          </div>
+      )}
+
       {/* HEADER */}
       <header className="bg-slate-900 text-white sticky top-0 z-50 shadow-lg">
         <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
@@ -253,7 +276,7 @@ export default function Home() {
             {!authLoading && (
               <div className="flex items-center gap-3">
                 <button 
-                  onClick={() => user ? setShowForm(true) : alert("🔒 Para publicar un aviso, primero debes iniciar sesión.")}
+                  onClick={() => user ? setShowForm(true) : alert("🔒 Para publicar un aviso, primero debes iniciar sesión con Google.")}
                   className={`px-3 py-1.5 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors ${
                     user 
                       ? "bg-red-600 hover:bg-red-700 text-white shadow-md" 
@@ -341,8 +364,9 @@ export default function Home() {
                   zoom={mapConfig.zoom}
                   key={mapConfig.key}
                 />
-                <p className="text-center text-xs text-slate-500 mt-2">
-                    🔴 Necesidades | 🟢 Ofertas
+                <p className="text-center text-xs text-slate-500 mt-2 flex items-center justify-center gap-3">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Necesidades</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Ofertas</span>
                 </p>
              </div>
         ) : (
@@ -424,6 +448,15 @@ export default function Home() {
             </div>
             
             <form onSubmit={handleSubmit} className="p-5 space-y-5">
+              
+              {/* Aviso en Formulario si está en Instagram */}
+              {isInAppBrowser && (
+                  <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg text-xs text-yellow-800 flex items-start gap-2">
+                      <Info size={16} className="shrink-0 mt-0.5" />
+                      <p>El mapa puede funcionar lento en Instagram. Si no puedes marcar la ubicación, escribe la dirección manualmente.</p>
+                  </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <label className={`cursor-pointer border-2 rounded-xl p-4 text-center transition-all ${formData.type === 'necesidad' ? 'border-red-500 bg-red-50 text-red-800' : 'border-slate-100 text-slate-400'}`}>
                   <input type="radio" name="type" className="hidden" checked={formData.type === 'necesidad'} onChange={() => setFormData({...formData, type: 'necesidad'})} />
@@ -470,4 +503,4 @@ export default function Home() {
       )}
     </div>
   );
-}
+};
