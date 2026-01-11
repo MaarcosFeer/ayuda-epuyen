@@ -517,7 +517,7 @@ export default function Home() {
                                 onClick={() => user && handleOpenHelpModal(post)}
                                 title={!user ? "🔒 Debes iniciar sesión para marcar asistencia" : ""} 
                                 className={`flex-1 py-2.5 px-4 rounded-lg font-bold text-sm shadow-sm transition-all flex justify-center items-center gap-2 whitespace-nowrap ${
-                                    user ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed" 
+                                    user ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400 cursor-not-allowed" 
                                 }`}
                             >
                                 ✋ ¡Yo voy!
