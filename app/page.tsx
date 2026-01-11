@@ -5,7 +5,9 @@ import dynamic from 'next/dynamic';
 import { 
   collection, addDoc, onSnapshot, 
   query, orderBy, serverTimestamp, doc, deleteDoc,
-  Timestamp
+  Timestamp,
+  updateDoc,
+  arrayUnion
 } from "firebase/firestore";
 import { 
   signInWithPopup, 
@@ -20,7 +22,7 @@ import {
   Home as HomeIcon, Stethoscope, Users, Wrench, X, 
   MapPin, Phone, Filter, Plus, LogOut, ShieldCheck, User,
   Map as MapIcon, List as ListIcon, Navigation, Trash2,
-  ExternalLink, Info
+  ExternalLink, Info, Clock
 } from 'lucide-react';
 
 // --- INTERFACES ---
@@ -39,6 +41,18 @@ interface Post {
   userPhoto?: string;
   resolved: boolean;
   createdAt: Timestamp | null;
+
+  status?: 'abierto' | 'en_proceso' | 'resuelto'; 
+  assignedTo?: { 
+    uid: string; 
+    name: string; 
+  }[];
+  history?: { 
+    action: string; 
+    user: string; 
+    timestamp: Timestamp | Date; // Aceptamos ambos para facilitar manejo
+    note?: string; 
+  }[];
 }
 
 interface NewPostForm {
@@ -113,6 +127,11 @@ export default function Home() {
   // Vista por defecto: Mapa
   const [viewMode, setViewMode] = useState<'list' | 'map'>('map');
   
+  //Vista Formularios Asistencia
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [helpNote, setHelpNote] = useState("");
+
   // Estado para controlar el centro y zoom del mapa
   const [mapConfig, setMapConfig] = useState({
     center: [-42.23, -71.36] as [number, number],
@@ -143,11 +162,21 @@ export default function Home() {
     // 2. Cargar Posts
     const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
     const unsubscribePosts = onSnapshot(q, (snapshot) => {
-      const postsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Post[];
+      const postsData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          // SI EL POST ES VIEJO Y NO TIENE STATUS, LE ASIGNAMOS 'abierto' O 'resuelto' SEGÚN CORRESPONDA
+          status: data.status || (data.resolved ? 'resuelto' : 'abierto'),
+          assignedTo: data.assignedTo || [],
+          history: data.history || []
+        };
+      }) as Post[];
       setPosts(postsData);
+    }, 
+    (error) => {
+        console.error("Error leyendo Firebase: ", error);
     });
 
     // 3. Detectar Navegador de Instagram/Facebook
@@ -252,6 +281,50 @@ export default function Home() {
     return true;
   });
 
+  const handleCommitToHelp = async (post: Post, note: string) => {
+  if (!user) return alert("Inicia sesión para ayudar.");
+
+  try {
+    const postRef = doc(db, "posts", post.id);
+    
+    // Referencia al historial (bitácora)
+    const newHistoryItem = {
+      action: "en_camino",
+      user: user.displayName || "Anónimo",
+      userId: user.uid,
+      note: note, // Ej: "Voy con motosierra"
+      timestamp: new Date()
+    };
+    // Actualizamos el documento
+    await updateDoc(postRef, {
+      status: 'en_proceso', // Cambia el estado para que otros vean que ya no está 'huérfano'
+      assignedTo: arrayUnion({ uid: user.uid, name: user.displayName }), // Agrega al voluntario
+      history: arrayUnion(newHistoryItem) // Guarda en la bitácora
+    });
+    
+    alert("¡Gracias! Se ha marcado que vas en camino.");
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error al registrar asistencia.");
+    }
+  };
+  const handleOpenHelpModal = (post: Post) => {
+      setSelectedPost(post);
+      setHelpNote(""); // Limpiamos la nota anterior
+      setShowHelpModal(true);
+    };
+
+  const submitHelp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPost || !helpNote.trim()) return;
+    
+    // Llamamos a tu función original (la que ya creaste antes)
+    await handleCommitToHelp(selectedPost, helpNote);
+    
+    // Cerramos el modal
+    setShowHelpModal(false);
+    setSelectedPost(null);
+  };
   const activeNeeds = posts.filter(p => p.type === 'necesidad' && !p.resolved).length;
   const activeOffers = posts.filter(p => p.type === 'oferta' && !p.resolved).length;
 
@@ -417,21 +490,56 @@ export default function Home() {
                         </div>
                         </div>
 
-                        <div className="flex gap-3">
-                        <a href={`tel:${post.contact}`} className="flex-1 bg-slate-900 text-white py-2.5 rounded-lg text-center font-medium text-sm hover:bg-slate-800 transition-colors flex justify-center items-center gap-2">
-                            <Phone size={16} /> {post.contact}
+                        {/* --- CÓDIGO NUEVO A PEGAR --- */}
+
+                    {/* 1. Aviso visual si alguien ya está ayudando */}
+                    {post.status === 'en_proceso' && (
+                      <div className="bg-yellow-100 text-yellow-800 p-2 rounded-md mb-3 text-xs font-bold flex items-center gap-2 border border-yellow-200">
+                          <Clock size={16}/> 
+                          ALGUIEN YA ESTÁ EN CAMINO / ASISTIENDO
+                      </div>
+                    )}
+
+                    <div className="flex gap-3">
+                        {/* 2. Botón de Contacto (Siempre visible) */}
+                        <a href={`tel:${post.contact}`} className="bg-slate-900 text-white py-2.5 px-4 rounded-lg font-medium text-sm hover:bg-slate-800 transition-colors flex items-center gap-2">
+                            <Phone size={16} /> Llamar
                         </a>
-                        {post.lat && post.lng && (
-                          <button onClick={() => handleLocateOnMap(post.lat!, post.lng!)} className="px-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center justify-center border border-slate-200" title="Ver ubicación en mapa">
-                            <Navigation size={18} />
-                          </button>
-                        )}
-                        {isOwner && (
-                            <button onClick={() => handleDeletePost(post)} className="px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:text-red-700 transition-colors flex items-center gap-2" title="Eliminar publicación">
-                            <Trash2 size={16} /> Eliminar
+
+                        {/* 3. Botón: Yo voy (Solo si está abierto y soy usuario logueado) */}
+                        {post.status === 'abierto' && user && (
+                            <button 
+                                onClick={() => handleOpenHelpModal(post)} // <--- CAMBIO AQUÍ
+                                className="flex-1 bg-slate-900 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-slate-800 shadow-sm transition-all"
+                            >
+                                ✋ ¡Yo voy!
                             </button>
                         )}
-                        </div>
+                        
+                        {/* 4. Botón: Sumarse (Si ya está en proceso) */}
+                        {post.status === 'en_proceso' && user && (
+                            <button 
+                                onClick={() => handleOpenHelpModal(post)} // <--- CAMBIO AQUÍ
+                                className="flex-1 bg-yellow-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-yellow-700 shadow-sm transition-all"
+                            >
+                                ➕ Sumarme
+                            </button>
+                        )}
+
+                        {/* 5. Botón Mapa */}
+                        {post.lat && post.lng && (
+                            <button onClick={() => handleLocateOnMap(post.lat!, post.lng!)} className="px-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center justify-center border border-slate-200" title="Ver ubicación en mapa">
+                                <Navigation size={18} />
+                            </button>
+                        )}
+
+                        {/* 6. Botón Eliminar (Solo dueño) */}
+                        {isOwner && (
+                            <button onClick={() => handleDeletePost(post)} className="px-3 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 flex items-center justify-center" title="Eliminar">
+                                <Trash2 size={16} />
+                            </button>
+                        )}
+                    </div>
                     </div>
                     </Card>
                 );
@@ -502,6 +610,70 @@ export default function Home() {
               <button type="submit" disabled={isPublishing} className="w-full bg-slate-900 text-white py-3.5 rounded-lg font-bold hover:bg-slate-800 disabled:opacity-50">
                 {isPublishing ? 'Publicando...' : 'Confirmar Publicación'}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+      {showHelpModal && selectedPost && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+            
+            {/* Header del Modal */}
+            <div className={`p-4 border-b border-slate-100 flex justify-between items-center ${selectedPost.status === 'en_proceso' ? 'bg-yellow-50' : 'bg-blue-50'}`}>
+              <h2 className={`text-lg font-bold flex items-center gap-2 ${selectedPost.status === 'en_proceso' ? 'text-yellow-800' : 'text-slate-900'}`}>
+                {selectedPost.status === 'en_proceso' ? (
+                    <>➕ Sumarse al equipo</>
+                ) : (
+                    <>✋ Confirmar Asistencia</>
+                )}
+              </h2>
+              <button onClick={() => setShowHelpModal(false)} className="p-2 hover:bg-black/5 rounded-full text-slate-900 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Cuerpo del Modal */}
+            <form onSubmit={submitHelp} className="p-5 space-y-4">
+              
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-sm text-slate-600">
+                <p className="font-semibold text-slate-900 mb-1">Vas a ayudar en:</p>
+                <p>"{selectedPost.title}"</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-900 mb-2">
+                    ¿Con qué equipo vas o cómo ayudarás?
+                </label>
+                <textarea 
+                    autoFocus
+                    placeholder="Ej: Voy con mi camioneta 4x4 y palas. Llego en 20 min." 
+                    className="w-full p-3 border border-slate-300 rounded-lg h-24 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all" 
+                    value={helpNote} 
+                    onChange={(e) => setHelpNote(e.target.value)} 
+                    required 
+                />
+                <p className="text-xs text-slate-900 mt-1 text-right">Esta info queda pública en el historial.</p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                    type="button"
+                    onClick={() => setShowHelpModal(false)} 
+                    className="flex-1 px-4 py-3 bg-white border border-slate-300 text-slate-900 rounded-lg font-bold hover:bg-slate-50 transition-colors"
+                >
+                    Cancelar
+                </button>
+                <button 
+                    type="submit" 
+                    className={`flex-1 px-4 py-3 text-white rounded-lg font-bold shadow-md transition-colors ${
+                        selectedPost.status === 'en_proceso' 
+                        ? 'bg-yellow-600 hover:bg-yellow-700' 
+                        : 'bg-slate-900 hover:bg-slate-800'
+                    }`}
+                >
+                    Confirmar que voy
+                </button>
+              </div>
             </form>
           </div>
         </div>
