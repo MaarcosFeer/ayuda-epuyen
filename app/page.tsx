@@ -7,10 +7,11 @@ import {
 } from 'lucide-react';
 
 // --- 1. IMPORTS DE TU ARQUITECTURA LIMPIA ---
-import { Post, NewPostForm } from '@/types';
+import { Post, NewPostForm, Squad } from '@/types';
 import { CATEGORIES } from '@/constants/categories';
 import { useAuth } from '@/hooks/useauth';
 import { usePosts } from '@/hooks/useposts';
+import {useSquads} from '@/hooks/usesquads';
 import { formatTime } from '@/utils/DateUtils';
 
 // --- 2. IMPORTS DE COMPONENTES VISUALES ---
@@ -18,11 +19,12 @@ import { Header } from '@/components/layout/Header';
 import { StatsBar } from '@/components/layout/StatsBar';
 import { PostCard } from '@/components/features/posts/PostCard';
 
+
 // --- 3. IMPORTACIÓN DE MAPA (Asegúrate de que la ruta coincida donde moviste el archivo) ---
 const CommunityMap = dynamic(
   () => import('@/components/features/map/Map').then((mod) => mod.CommunityMap),
   { ssr: false, loading: () => <div className="h-[400px] w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-400">Cargando Mapa...</div> }
-) as React.ComponentType<{ posts: Post[]; center?: [number, number]; zoom?: number; key?: string; }>;
+) as React.ComponentType<{ posts: Post[];squads: Squad[]; center?: [number, number]; zoom?: number; key?: string; }>;
 
 const LocationPicker = dynamic(
   () => import('@/components/features/map/Map').then((mod) => mod.LocationPicker),
@@ -34,6 +36,7 @@ export default function Home() {
   // --- A. HOOKS (Lógica de Negocio delegada) ---
   const { user, loading: authLoading, login, logout } = useAuth();
   const { posts, addPost, removePost, assistPost } = usePosts();
+  const { squads } = useSquads();
 
   // --- B. ESTADOS LOCALES (Solo UI / Modales) ---
   const [filterType, setFilterType] = useState('all');
@@ -188,7 +191,7 @@ export default function Home() {
         {/* Contenido Principal */}
         {viewMode === 'map' ? (
           <div className="animate-in fade-in duration-300">
-            <CommunityMap posts={filteredPosts} center={mapConfig.center} zoom={mapConfig.zoom} key={mapConfig.key} />
+            <CommunityMap posts={filteredPosts} squads={squads} center={mapConfig.center} zoom={mapConfig.zoom} key={mapConfig.key} />
             <p className="text-center text-xs text-slate-500 mt-2 flex items-center justify-center gap-3">
                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Necesidades</span>
                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Ofertas</span>
