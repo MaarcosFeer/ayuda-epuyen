@@ -25,6 +25,8 @@ export interface Post {
   lng?: number;
   contact: string;
   userId: string;
+  userName?: string;
+  userPhoto?: string;
   resolved: boolean;
   createdAt: Timestamp | null;
   status: 'abierto' | 'en_proceso' | 'resuelto';
@@ -80,8 +82,10 @@ export interface SquadMission {
 }
 export interface Squad {
   id: string;
+  
   leaderName: string; leaderDni: string; leaderPhone: string; lodgingLocation?: string;
   name: string; membersCount: number; interventionZone: string; locationLink?: string;
-  lat?: number; lng?: number;
+  lat?: number | null;
+  lng?: number | null;
   equipment: SquadEquipment; skills: SquadSkills; mission: SquadMission;
 }
