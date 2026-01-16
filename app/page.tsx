@@ -2,16 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation'; // Importamos router para navegar al admin
 import { 
-  Filter, X, AlertTriangle, CheckCircle, Info, Users, Map as MapIcon, List as ListIcon 
+  Filter, X, AlertTriangle, CheckCircle, Info, Users, Map as MapIcon, List as ListIcon, Shield 
 } from 'lucide-react';
 
 // --- 1. IMPORTS DE TU ARQUITECTURA LIMPIA ---
-import { Post, NewPostForm, Squad } from '@/types';
+import { Post, NewPostForm, Squad, LogisticsPoint } from '@/types'; // Agregamos LogisticsPoint
 import { CATEGORIES } from '@/constants/categories';
-import { useAuth } from '@/hooks/useauth';
-import { usePosts } from '@/hooks/useposts';
-import {useSquads} from '@/hooks/usesquads';
+import { useAuth } from '@/hooks/useAuth';
+import { usePosts } from '@/hooks/usePosts';
+import { useSquads } from '@/hooks/useSquads'; // Hook de cuadrillas
 import { formatTime } from '@/utils/DateUtils';
 
 // --- 2. IMPORTS DE COMPONENTES VISUALES ---
@@ -19,12 +20,21 @@ import { Header } from '@/components/layout/Header';
 import { StatsBar } from '@/components/layout/StatsBar';
 import { PostCard } from '@/components/features/posts/PostCard';
 
-
-// --- 3. IMPORTACIÓN DE MAPA (Asegúrate de que la ruta coincida donde moviste el archivo) ---
+// --- 3. IMPORTACIÓN DE MAPA DINÁMICO ---
 const CommunityMap = dynamic(
   () => import('@/components/features/map/Map').then((mod) => mod.CommunityMap),
-  { ssr: false, loading: () => <div className="h-[400px] w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-400">Cargando Mapa...</div> }
-) as React.ComponentType<{ posts: Post[];squads: Squad[]; center?: [number, number]; zoom?: number; key?: string; }>;
+  { 
+    ssr: false, 
+    loading: () => <div className="h-[400px] w-full bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-400">Cargando Mapa...</div> 
+  }
+) as React.ComponentType<{ 
+    posts: Post[]; 
+    squads: Squad[]; 
+    logistics?: LogisticsPoint[]; // Definición actualizada
+    center?: [number, number]; 
+    zoom?: number; 
+    key?: string; 
+}>;
 
 const LocationPicker = dynamic(
   () => import('@/components/features/map/Map').then((mod) => mod.LocationPicker),
@@ -34,9 +44,12 @@ const LocationPicker = dynamic(
 
 export default function Home() {
   // --- A. HOOKS (Lógica de Negocio delegada) ---
-  const { user, loading: authLoading, login, logout } = useAuth();
+  // IMPORTANTE: Extraemos 'profile' para saber si es admin
+  const { user, profile, loading: authLoading, login, logout } = useAuth();
   const { posts, addPost, removePost, assistPost } = usePosts();
-  const { squads } = useSquads();
+  const { squads } = useSquads(); // Obtenemos las cuadrillas del hook
+  
+  const router = useRouter();
 
   // --- B. ESTADOS LOCALES (Solo UI / Modales) ---
   const [filterType, setFilterType] = useState('all');
@@ -90,7 +103,7 @@ export default function Home() {
     if (!user) return alert("Debes iniciar sesión.");
     setIsPublishing(true);
 
-    const success = await addPost(formData, user); // <-- Hook en acción
+    const success = await addPost(formData, user); 
     
     if (success) {
       setShowForm(false);
@@ -108,7 +121,7 @@ export default function Home() {
 
   const handleDelete = async (post: Post) => {
     if (!confirm("¿Eliminar este aviso?")) return;
-    const success = await removePost(post.id); // <-- Hook en acción
+    const success = await removePost(post.id); 
     if (success) setToast({ message: "Eliminado correctamente", type: 'success' });
     else setToast({ message: "Error al eliminar", type: 'error' });
   };
@@ -123,7 +136,7 @@ export default function Home() {
     e.preventDefault();
     if (!selectedPost || !helpNote.trim() || !user) return;
 
-    const success = await assistPost(selectedPost.id, user, helpNote); // <-- Hook en acción
+    const success = await assistPost(selectedPost.id, user, helpNote); 
 
     if (success) {
       setToast({ message: "¡Gracias! Se marcó tu asistencia.", type: 'success' });
@@ -150,7 +163,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-10">
 
-      {/* 1. Header Refactorizado */}
+      {/* 1. Header */}
       <Header 
         user={user} 
         loading={authLoading} 
@@ -159,12 +172,12 @@ export default function Home() {
         onOpenForm={() => setShowForm(true)} 
       />
 
-      {/* 2. Stats Refactorizado */}
+      {/* 2. Stats */}
       <StatsBar needsCount={activeNeeds} offersCount={activeOffers} />
 
       <main className="max-w-3xl mx-auto px-4 py-6">
         
-        {/* Barra de Filtros (Todavía en page.tsx, ideal para refactorizar luego) */}
+        {/* Barra de Filtros y Botón Admin */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div className="flex flex-wrap gap-2 p-1 bg-white rounded-lg border border-slate-200 w-fit shadow-sm">
             <button onClick={() => setFilterType('all')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterType === 'all' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Todo</button>
@@ -174,9 +187,22 @@ export default function Home() {
               <button onClick={() => { setFilterType('mine'); setViewMode('list'); }} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border-l ml-1 ${filterType === 'mine' ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-50'}`}>Mis Avisos</button>
             )}
           </div>
-          <div className="flex gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
-            <button onClick={() => setViewMode('map')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'map' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}><MapIcon size={16} /> Mapa</button>
-            <button onClick={() => setViewMode('list')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}><ListIcon size={16} /> Lista</button>
+
+          <div className="flex items-center gap-2">
+            {/* BOTÓN DE ADMIN (Solo visible si el rol es admin) */}
+            {profile?.role === 'admin' && (
+                <button 
+                    onClick={() => router.push('/admin')}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm"
+                >
+                    <Shield size={14} /> Panel
+                </button>
+            )}
+
+            <div className="flex gap-2 bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                <button onClick={() => setViewMode('map')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'map' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}><MapIcon size={16} /> Mapa</button>
+                <button onClick={() => setViewMode('list')} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}><ListIcon size={16} /> Lista</button>
+            </div>
           </div>
         </div>
 
@@ -191,11 +217,21 @@ export default function Home() {
         {/* Contenido Principal */}
         {viewMode === 'map' ? (
           <div className="animate-in fade-in duration-300">
-            <CommunityMap posts={filteredPosts} squads={squads} center={mapConfig.center} zoom={mapConfig.zoom} key={mapConfig.key} />
-            <p className="text-center text-xs text-slate-500 mt-2 flex items-center justify-center gap-3">
-               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Necesidades</span>
-               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Ofertas</span>
-            </p>
+            {/* Pasamos SQUADS al mapa */}
+            <CommunityMap 
+                posts={filteredPosts} 
+                squads={squads} 
+                center={mapConfig.center} 
+                zoom={mapConfig.zoom} 
+                key={mapConfig.key} 
+            />
+            {/* LEYENDA DEL MAPA ACTUALIZADA */}
+            <div className="flex flex-wrap items-center justify-center gap-4 mt-3 text-xs text-slate-600 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+               <span className="flex items-center gap-1 font-medium"><span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span> Cuadrillas ({squads.length})</span>
+               <span className="w-px h-3 bg-slate-300"></span>
+               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Necesidades</span>
+               <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500"></span> Ofertas</span>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4 animate-in fade-in duration-300">
@@ -205,7 +241,6 @@ export default function Home() {
                 <p>No hay publicaciones.</p>
               </div>
             ) : (
-              // 3. LA TARJETA REFACTORIZADA
               filteredPosts.map(post => (
                 <PostCard
                   key={post.id}
@@ -222,7 +257,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* --- MODALES (Toast, Formulario, Ayuda, Asistentes) --- */}
+      {/* --- MODALES --- */}
       
       {toast && (
         <div className={`fixed bottom-5 right-5 z-[100] px-6 py-4 rounded-xl shadow-2xl font-bold text-white flex items-center gap-3 animate-in slide-in-from-right duration-300 ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
@@ -320,4 +355,4 @@ export default function Home() {
 
     </div>
   );
-};
+}
