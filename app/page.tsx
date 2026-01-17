@@ -184,7 +184,7 @@ export default function Home() {
             <button onClick={() => setFilterType('necesidad')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterType === 'necesidad' ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Necesito</button>
             <button onClick={() => setFilterType('oferta')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${filterType === 'oferta' ? 'bg-green-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Ofrezco</button>
             {user && (
-              <button onClick={() => { setFilterType('mine'); setViewMode('list'); }} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border-l ml-1 ${filterType === 'mine' ? 'bg-blue-600 text-white' : 'text-blue-600 hover:bg-blue-50'}`}>Mis Avisos</button>
+              <button onClick={() => { setFilterType('mine'); setViewMode('list'); }} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border-l ml-1 ${filterType === 'mine' ? 'bg-slate-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}>Mis Avisos</button>
             )}
           </div>
 
